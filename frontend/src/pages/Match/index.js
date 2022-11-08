@@ -29,6 +29,7 @@ const DURATION = 30;
 // Socket
 const socket = io(URL_MATCHING_SVC_SOCKET, {
   path: PATH_MATCHING_SVC_SOCKET,
+  withCredentials: true,
 });
 
 function MatchPage() {
@@ -40,7 +41,6 @@ function MatchPage() {
   const difficulty = location.state?.difficulty;
 
   // Socket
-  const [room, setRoom] = useState('');
   const [isMatchFailed, setIsMatchFailed] = useState(false);
 
   // Timer
@@ -55,10 +55,13 @@ function MatchPage() {
     }
   }, [difficulty, navigate, alertCtx]);
 
-  // Register socket listeners
+  // Socket setup
   useEffect(() => {
+    // Register socket listeners
     socket.on('matchSuccess', (room) => {
-      setRoom(room);
+      if (difficulty) {
+        navigate('/room', { state: { room, difficulty } });
+      }
     });
     socket.on('matchFail', () => {
       setIsMatchFailed(true);
@@ -67,28 +70,23 @@ function MatchPage() {
       setIsMatchFailed(true);
     });
 
-    // Disconnect when unmount
-    return () => socket.disconnect();
-  }, []);
-
-  // Emit match event
-  useEffect(() => {
+     // Emit match event
     if (difficulty && userCtx.username) {
       socket.emit('match', {
         difficulty,
         username: userCtx.username,
       });
     }
-  }, [difficulty, userCtx]);
 
-  // Navigate to room page upon successful match
-  useEffect(() => {
-    if (room && difficulty) {
-      room && navigate('/room', { state: { room, difficulty } });
+    // Unregister listeners when unmount
+    return () => {
+      socket.off('matchSuccess');
+      socket.off('matchFail');
+      socket.off('disconnect');
     }
-  }, [room, difficulty, navigate]);
+  }, [difficulty, navigate, userCtx]);
 
-  // Timer
+  // Timer logic
   useEffect(() => {
     if (counter > 0) {
       setTimeout(() => setCounter(prevCounter => prevCounter - 1), 1000);
@@ -99,7 +97,7 @@ function MatchPage() {
 
   // Handlers
   const handleCancel = () => {
-    socket.disconnect();
+    socket.emit('cancelMatch', { id: socket.id });
     navigate('/home');
   };
   const handleRetry = () => {
@@ -126,7 +124,7 @@ function MatchPage() {
   }
 
   return (
-    <OutlinedContainer customStyle={{ width: '450px' }}>
+    <OutlinedContainer customStyle={{ width: '75vw', maxWidth: '500px !important' }}>
       <Grid container direction='column' alignItems='center' padding={3}>
         <Grid item>
           <div className={boxStyling}>
